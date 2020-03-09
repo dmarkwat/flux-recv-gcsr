@@ -87,6 +87,8 @@ func main() {
 		projectId = credentials.ProjectID
 	}
 
+	log.Infof("Creating pubsub client for project, %v", projectId)
+
 	client, err := pubsub.NewClient(ctx, projectId)
 	if err != nil {
 		log.Fatalf("pubsub.NewClient: %v", err)
@@ -95,16 +97,30 @@ func main() {
 
 	cm := make(chan *pubsub.Message)
 
+	log.Infof("Creating flux client at %v", defaultApiBase)
+
 	apiClient := fluxclient.New(http.DefaultClient, fluxhttp.NewAPIRouter(), defaultApiBase, fluxclient.Token(""))
 
+	version, err := apiClient.Version(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("Flux client connected to flux %v", version)
+
 	go func() {
+		log.Info("Handle loop starting")
 		handleLoop(ctx, cm, apiClient, syncTimeout)
 	}()
+
+	log.Info("Preparing subscription")
 
 	sub, err := prepare(ctx, client, cm, topicId, subId, syncTimeout)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	log.Info("Consuming")
 
 	err = consume(ctx, sub, cm)
 	if err != nil {
@@ -158,7 +174,7 @@ func handleLoop(ctx context.Context, cm chan *pubsub.Message, apiClient *fluxcli
 		case msg := <-cm:
 			var notification sourceRepoNotification
 			if err := json.Unmarshal(msg.Data, &notification); err != nil {
-				log.Fatalf("Couldn't unmarshal pubsub message data, %v", err)
+				log.Errorf("Couldn't unmarshal pubsub message data, %v", err)
 			}
 
 			err := handleMsg(ctx, notification, apiClient, syncTimeout)
@@ -175,6 +191,8 @@ func handleLoop(ctx context.Context, cm chan *pubsub.Message, apiClient *fluxcli
 }
 
 func handleMsg(ctx context.Context, notification sourceRepoNotification, apiClient *fluxclient.Client, syncTimeout time.Duration) error {
+	log.Infof("Handling notification for repo, %v", notification.Url)
+
 	for _, ref := range notification.RefUpdateEvent.RefUpdates {
 		update := fluxapi_v9.GitUpdate{
 			URL:    notification.Url,
@@ -184,6 +202,8 @@ func handleMsg(ctx context.Context, notification sourceRepoNotification, apiClie
 			Kind:   fluxapi_v9.GitChange,
 			Source: update,
 		}
+
+		log.Info("Notifying flux of git update for ref, %v, on repo, %v", ref.RefName, notification.Url)
 
 		err := func() error {
 			ctx, cancel := context.WithTimeout(ctx, syncTimeout)
@@ -198,6 +218,7 @@ func handleMsg(ctx context.Context, notification sourceRepoNotification, apiClie
 				}
 				return err
 			}
+			log.Info("Successfully notified flux")
 			return nil
 		}()
 
@@ -212,7 +233,7 @@ func handleMsg(ctx context.Context, notification sourceRepoNotification, apiClie
 func consume(ctx context.Context, sub *pubsub.Subscription, cm chan *pubsub.Message) error {
 	// Receive blocks until the passed in context is done.
 	err := sub.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
-		log.Infof("Message received, %v", msg.ID)
+		log.Infof("Received message,%v, for the %vst/rd/th time", msg.ID, msg.DeliveryAttempt)
 		cm <- msg
 	})
 	if err != nil && status.Code(err) != codes.Canceled {
