@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"log"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -123,10 +124,12 @@ func TestHandle(t *testing.T) {
 		Handler: handler,
 	}
 
+	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 3030})
+
 	stop := make(chan bool, 1)
 
 	go func() {
-		err := httpServer.ListenAndServe()
+		err := httpServer.Serve(listener)
 		if err != nil && err != http.ErrServerClosed {
 			t.Error(err)
 		}
@@ -135,7 +138,7 @@ func TestHandle(t *testing.T) {
 
 	apiClient := fluxclient.New(http.DefaultClient, fluxhttp.NewAPIRouter(), "http://localhost:3030", fluxclient.Token(""))
 
-	err := handleMsg(context.Background(), notification, apiClient, 10*time.Second)
+	err = handleMsg(context.Background(), notification, apiClient, 10*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +146,8 @@ func TestHandle(t *testing.T) {
 	if err = httpServer.Close(); err != nil {
 		t.Fatal(err)
 	}
+
+	_ = listener.Close()
 
 	<-stop
 }
