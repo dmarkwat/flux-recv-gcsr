@@ -1,4 +1,4 @@
-module github.com/dmarkwat/flux-gcsr
+module github.com/dmarkwat/flux-recv-gcsr
 
 go 1.13
 
