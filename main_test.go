@@ -118,19 +118,19 @@ func TestHandle(t *testing.T) {
 	handler := fluxdaemon.NewHandler(MockServer{
 		T: t,
 	}, fluxdaemon.NewRouter())
-	httpServer := http.Server{
+	httpServer := &http.Server{
 		Addr:    "127.0.0.1:3030",
 		Handler: handler,
 	}
 
 	stop := make(chan bool, 1)
-	stop <- true
 
 	go func() {
 		err := httpServer.ListenAndServe()
-		if err != nil {
-			t.Fatal(err)
+		if err != nil && err != http.ErrServerClosed {
+			t.Error(err)
 		}
+		stop <- true
 	}()
 
 	apiClient := fluxclient.New(http.DefaultClient, fluxhttp.NewAPIRouter(), "http://localhost:3030", fluxclient.Token(""))
@@ -140,14 +140,11 @@ func TestHandle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	<-stop
-
-	if err := httpServer.Shutdown(context.TODO()); err != nil {
-		t.Fatal(err)
-	}
 	if err = httpServer.Close(); err != nil {
 		t.Fatal(err)
 	}
+
+	<-stop
 }
 
 type MockServer struct {
