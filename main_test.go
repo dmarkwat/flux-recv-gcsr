@@ -110,6 +110,8 @@ func TestConsume(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	close(cm)
 }
 
 func TestHandle(t *testing.T) {
@@ -120,7 +122,9 @@ func TestHandle(t *testing.T) {
 		Addr:    "127.0.0.1:3030",
 		Handler: handler,
 	}
-	defer httpServer.Close()
+
+	stop := make(chan bool, 1)
+	stop <- true
 
 	go func() {
 		err := httpServer.ListenAndServe()
@@ -133,6 +137,15 @@ func TestHandle(t *testing.T) {
 
 	err := handleMsg(context.Background(), notification, apiClient, 10*time.Second)
 	if err != nil {
+		t.Fatal(err)
+	}
+
+	<-stop
+
+	if err := httpServer.Shutdown(context.TODO()); err != nil {
+		t.Fatal(err)
+	}
+	if err = httpServer.Close(); err != nil {
 		t.Fatal(err)
 	}
 }
