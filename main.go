@@ -203,7 +203,7 @@ func handleMsg(ctx context.Context, notification sourceRepoNotification, apiClie
 			Source: update,
 		}
 
-		log.Info("Notifying flux of git update for ref, %v, on repo, %v", ref.RefName, notification.Url)
+		log.Infof("Notifying flux of git update for ref, %v, on repo, %v", ref.RefName, notification.Url)
 
 		err := func() error {
 			ctx, cancel := context.WithTimeout(ctx, syncTimeout)
